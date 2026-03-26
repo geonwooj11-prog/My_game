@@ -7,33 +7,17 @@
 
 <style>
 body {margin:0; overflow:hidden; background:black; color:white;}
-
+canvas {position:absolute;}
 #startScreen {
 position:absolute;
 width:100%; height:100%;
 display:flex;
+flex-direction:column;
 justify-content:center;
 align-items:center;
-flex-direction:column;
 background:black;
-z-index:10;
 }
-
-#joystick {
-position:absolute;
-bottom:50px; left:50px;
-width:120px; height:120px;
-background:rgba(255,255,255,0.1);
-border-radius:50%;
-}
-
-#stick {
-width:40px; height:40px;
-background:cyan;
-border-radius:50%;
-position:absolute;
-top:40px; left:40px;
-}
+button {margin:5px; padding:10px;}
 </style>
 </head>
 
@@ -41,163 +25,197 @@ top:40px; left:40px;
 
 <div id="startScreen">
 <h1 style="color:#0ff;">VOID RUSH</h1>
+
+<select id="char">
+<option value="warrior">버서커</option>
+<option value="ninja">닌자</option>
+<option value="sniper">스나이퍼</option>
+</select>
+
+<select id="skin">
+<option value="default">기본</option>
+<option value="gold">골드</option>
+<option value="dark">다크</option>
+</select>
+
 <button onclick="startGame()">START</button>
+<button onclick="gacha()">가챠</button>
 </div>
 
 <canvas id="game" style="display:none;"></canvas>
-
-<div id="joystick">
-<div id="stick"></div>
-</div>
 
 <script>
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
-// ===== 화면 =====
 function resize(){
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
+canvas.width=window.innerWidth;
+canvas.height=window.innerHeight;
 }
 resize();
 window.addEventListener("resize", resize);
 
 // ===== 데이터 =====
-let player = {x:500, y:500, hp:100, atk:10};
-let enemies = [];
-let wave = 1;
+let player = {x:500,y:500,hp:100,atk:10,job:"warrior",skin:"default"};
+let enemies=[];
+let wave=1;
+
+// ===== 인벤토리 =====
+let inventory = JSON.parse(localStorage.getItem("inv")) || {
+skins:["default"],
+chars:["warrior"]
+};
+
+// ===== 가챠 =====
+function gacha(){
+let rand=Math.random();
+
+if(rand<0.3){
+inventory.skins.push("gold");
+alert("골드 스킨 획득!");
+}else{
+inventory.skins.push("dark");
+alert("다크 스킨 획득!");
+}
+
+localStorage.setItem("inv", JSON.stringify(inventory));
+}
 
 // ===== 시작 =====
 function startGame(){
-  document.getElementById("startScreen").style.display="none";
-  canvas.style.display="block";
-  spawnWave();
+player.job=document.getElementById("char").value;
+player.skin=document.getElementById("skin").value;
+
+document.getElementById("startScreen").style.display="none";
+canvas.style.display="block";
+
+spawnWave();
 }
 
-// ===== 적 생성 =====
+// ===== 적 =====
 function spawnWave(){
-  enemies = [];
-  for(let i=0;i<wave+2;i++){
-    enemies.push({
-      x:Math.random()*1500,
-      y:Math.random()*1500,
-      hp:50
-    });
-  }
+enemies=[];
+for(let i=0;i<wave+2;i++){
+enemies.push({
+x:player.x+(Math.random()*400-200),
+y:player.y+(Math.random()*400-200),
+hp:50
+});
+}
+if(wave%5===0){
+enemies.push({x:player.x+200,y:player.y,hp:300,boss:true});
+}
 }
 
 // ===== 공격 =====
-function basicAttack(){
-  enemies.forEach(e=>{
-    let dx = player.x - e.x;
-    let dy = player.y - e.y;
+canvas.addEventListener("click", ()=>{
+enemies.forEach(e=>{
+let dx=player.x-e.x;
+let dy=player.y-e.y;
+if(Math.sqrt(dx*dx+dy*dy)<80){
+e.hp-=player.atk;
+createEffect(e.x,e.y);
+}
+});
+});
 
-    if(Math.sqrt(dx*dx+dy*dy) < 60){
-      e.hp -= player.atk;
-    }
-  });
+// ===== 이펙트 =====
+let effects=[];
+function createEffect(x,y){
+effects.push({x,y,size:10});
 }
 
-canvas.addEventListener("click", basicAttack);
-canvas.addEventListener("touchstart", basicAttack);
-
-// ===== 조이스틱 =====
-let joy = document.getElementById("joystick");
-
-let moveX = 0;
-let moveY = 0;
-
-joy.addEventListener("touchmove", e=>{
-  let t = e.touches[0];
-  let rect = joy.getBoundingClientRect();
-
-  let dx = t.clientX - (rect.left + rect.width/2);
-  let dy = t.clientY - (rect.top + rect.height/2);
-
-  moveX = dx * 0.1;
-  moveY = dy * 0.1;
-});
-
-joy.addEventListener("touchend", ()=>{
-  moveX = 0;
-  moveY = 0;
-});
-
-// ===== PC 이동 =====
+// ===== 이동 =====
 document.addEventListener("keydown", e=>{
-  if(e.key==="w") player.y -= 10;
-  if(e.key==="s") player.y += 10;
-  if(e.key==="a") player.x -= 10;
-  if(e.key==="d") player.x += 10;
+if(e.key==="w")player.y-=10;
+if(e.key==="s")player.y+=10;
+if(e.key==="a")player.x-=10;
+if(e.key==="d")player.x+=10;
 });
 
 // ===== 카메라 =====
-let camera = {x:0, y:0};
-
+let camera={x:0,y:0};
 function updateCamera(){
-  camera.x = player.x - canvas.width/2;
-  camera.y = player.y - canvas.height/2;
+camera.x=player.x-canvas.width/2;
+camera.y=player.y-canvas.height/2;
+}
+
+// ===== 캐릭터 색 =====
+function getColor(){
+if(player.skin==="gold") return "gold";
+if(player.skin==="dark") return "gray";
+return "cyan";
 }
 
 // ===== AI =====
 function enemyAI(){
-  enemies.forEach(e=>{
-    let dx = player.x - e.x;
-    let dy = player.y - e.y;
-    let dist = Math.sqrt(dx*dx+dy*dy);
+enemies.forEach(e=>{
+let dx=player.x-e.x;
+let dy=player.y-e.y;
+let dist=Math.sqrt(dx*dx+dy*dy);
 
-    if(dist > 5){
-      e.x += dx/dist * 2;
-      e.y += dy/dist * 2;
-    }
+if(dist>5){
+e.x+=dx/dist*2;
+e.y+=dy/dist*2;
+}
 
-    if(dist < 30){
-      player.hp -= 0.2;
-    }
-  });
+if(dist<30){
+player.hp-=0.2;
+}
+});
 }
 
 // ===== 루프 =====
 function draw(){
 
-  ctx.setTransform(1,0,0,1,0,0);
-  ctx.clearRect(0,0,canvas.width,canvas.height);
+ctx.setTransform(1,0,0,1,0,0);
+ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  // 이동 적용
-  player.x += moveX;
-  player.y += moveY;
+updateCamera();
+ctx.translate(-camera.x,-camera.y);
 
-  updateCamera();
-  ctx.translate(-camera.x, -camera.y);
+// 플레이어
+ctx.fillStyle=getColor();
+ctx.beginPath();
+ctx.arc(player.x,player.y,12,0,Math.PI*2);
+ctx.fill();
 
-  // 플레이어
-  ctx.fillStyle="cyan";
-  ctx.fillRect(player.x, player.y, 25, 25);
+// 적
+enemies=enemies.filter(e=>e.hp>0);
 
-  // 적
-  enemies = enemies.filter(e => e.hp > 0);
+enemies.forEach(e=>{
+ctx.fillStyle=e.boss?"purple":"red";
+ctx.beginPath();
+ctx.arc(e.x,e.y,e.boss?18:10,0,Math.PI*2);
+ctx.fill();
+});
 
-  enemies.forEach(e=>{
-    ctx.fillStyle="red";
-    ctx.fillRect(e.x, e.y, 25, 25);
-  });
+// 이펙트
+effects.forEach((ef,i)=>{
+ctx.fillStyle="yellow";
+ctx.beginPath();
+ctx.arc(ef.x,ef.y,ef.size,0,Math.PI*2);
+ctx.fill();
+ef.size+=2;
+if(ef.size>20)effects.splice(i,1);
+});
 
-  // AI
-  enemyAI();
+// AI
+enemyAI();
 
-  // 웨이브
-  if(enemies.length === 0){
-    wave++;
-    spawnWave();
-  }
+// 웨이브
+if(enemies.length===0){
+wave++;
+spawnWave();
+}
 
-  // UI
-  ctx.setTransform(1,0,0,1,0,0);
-  ctx.fillStyle="white";
-  ctx.fillText("HP: " + Math.floor(player.hp), 20, 30);
-  ctx.fillText("Wave: " + wave, 20, 50);
+// UI
+ctx.setTransform(1,0,0,1,0,0);
+ctx.fillStyle="white";
+ctx.fillText("HP:"+Math.floor(player.hp),20,30);
+ctx.fillText("Wave:"+wave,20,50);
 
-  requestAnimationFrame(draw);
+requestAnimationFrame(draw);
 }
 draw();
 </script>
