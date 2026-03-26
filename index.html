@@ -1,11 +1,233 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>My Game</title>
+<meta charset="UTF-8">
+<title>LEGEND ARENA</title>
+
+<style>
+body {margin:0; background:#111; color:white; text-align:center;}
+canvas {background:#222;}
+
+#startScreen {
+position:absolute; width:100%; height:100%;
+background:#111; display:flex;
+flex-direction:column; justify-content:center; align-items:center;
+}
+
+.bar {height:10px; background:#444; margin:5px; width:80%;}
+.fill {height:100%; background:red;}
+
+#skills {position:fixed; bottom:20px; right:20px;}
+.skill {
+width:60px;height:60px;background:#333;
+display:inline-block;margin:5px;border-radius:10px;
+position:relative;
+}
+.cooldown {
+position:absolute;width:100%;height:100%;
+background:rgba(0,0,0,0.7);
+display:none;text-align:center;line-height:60px;
+}
+
+.ready {box-shadow:0 0 10px cyan;}
+.ult-ready {box-shadow:0 0 20px red;}
+</style>
 </head>
+
 <body>
-  <h1>🔥 게임 성공 🔥</h1>
+
+<div id="startScreen">
+<h1>🔥 LEGEND ARENA 🔥</h1>
+
+<select id="char"></select>
+
+<button onclick="startGame('pc')">PC</button>
+<button onclick="startGame('mobile')">모바일</button>
+</div>
+
+<canvas id="game" width="400" height="400" style="display:none;"></canvas>
+
+<div id="skills">
+<div class="skill" onclick="useSkill(0)">Q<div id="cd0" class="cooldown"></div></div>
+<div class="skill" onclick="useSkill(1)">E<div id="cd1" class="cooldown"></div></div>
+<div class="skill" onclick="useSkill(2)">R<div id="cd2" class="cooldown"></div></div>
+<div class="skill" onclick="useUlt()">F<div id="cd3" class="cooldown"></div></div>
+</div>
+
+<script>
+// ===== 데이터 =====
+let player = {x:200,y:200,hp:100,level:1,exp:0,atk:10};
+let enemies = [];
+let cooldowns = [0,0,0,0];
+let selectedChar;
+
+// ===== VIP =====
+let vip = {level:0, freeStart:null, lastGivenMonth:null};
+
+// ===== 인벤토리 =====
+let inventory = {characters:["버서커","닌자","스나이퍼"]};
+
+// ===== 캐릭 =====
+const characters = {
+"버서커":{
+skills:[()=>attackAll(20),()=>attackAll(15),()=>attackAll(30)],
+ult:()=>attackAll(60)
+},
+"닌자":{
+skills:[()=>player.invisible=true,()=>attackAll(15),()=>attackAll(25)],
+ult:()=>attackAll(50)
+},
+"스나이퍼":{
+skills:[()=>attackAll(10),()=>attackAll(20),()=>attackAll(35)],
+ult:()=>attackAll(70)
+}
+};
+
+// ===== 시작 =====
+function startGame(m){
+selectedChar = document.getElementById("char").value;
+document.getElementById("startScreen").style.display="none";
+document.getElementById("game").style.display="block";
+spawnEnemies();
+}
+
+// ===== 적 =====
+function spawnEnemies(){
+enemies = [];
+for(let i=0;i<3;i++){
+enemies.push({x:Math.random()*350,y:Math.random()*350,hp:100});
+}
+}
+
+// ===== 공격 =====
+function basicAttack(){
+enemies.forEach(e=>{
+let dx=player.x-e.x;
+let dy=player.y-e.y;
+if(Math.sqrt(dx*dx+dy*dy)<50){
+e.hp-=player.atk;
+}
+});
+}
+
+// ===== 스킬 =====
+function useSkill(i){
+if(cooldowns[i]>0)return;
+characters[selectedChar].skills[i]();
+cooldowns[i]=3;
+}
+function useUlt(){
+if(cooldowns[3]>0)return;
+characters[selectedChar].ult();
+cooldowns[3]=8;
+}
+
+function attackAll(dmg){
+enemies.forEach(e=>e.hp-=dmg);
+}
+
+// ===== 이동 =====
+document.addEventListener("keydown",(e)=>{
+if(e.key==="w")player.y-=5;
+if(e.key==="s")player.y+=5;
+if(e.key==="a")player.x-=5;
+if(e.key==="d")player.x+=5;
+if(e.key==="q")useSkill(0);
+if(e.key==="e")useSkill(1);
+if(e.key==="r")useSkill(2);
+if(e.key==="f")useUlt();
+});
+
+canvas.addEventListener("click",basicAttack);
+
+// ===== 레벨 =====
+function giveExp(){
+player.exp+=20;
+if(player.exp>=player.level*50){
+player.exp=0;
+player.level++;
+player.atk+=2;
+}
+}
+
+// ===== VIP =====
+function checkMonthlyVIP(){
+let now=new Date();
+let key=now.getFullYear()+"-"+now.getMonth();
+if(now.getDate()===1 && vip.lastGivenMonth!==key){
+vip.level=1;
+vip.freeStart=now.getTime();
+vip.lastGivenMonth=key;
+}
+}
+
+// ===== AI =====
+function enemyAI(){
+enemies.forEach(e=>{
+let dx=player.x-e.x;
+let dy=player.y-e.y;
+let dist=Math.sqrt(dx*dx+dy*dy);
+
+if(dist>5){
+e.x+=dx/dist;
+e.y+=dy/dist;
+}
+
+if(dist<30){
+player.hp-=0.2;
+}
+});
+}
+
+// ===== UI =====
+function updateUI(){
+document.getElementById("cd0").innerText=cooldowns[0];
+document.getElementById("cd1").innerText=cooldowns[1];
+document.getElementById("cd2").innerText=cooldowns[2];
+document.getElementById("cd3").innerText=cooldowns[3];
+}
+
+// ===== 루프 =====
+const canvas=document.getElementById("game");
+const ctx=canvas.getContext("2d");
+
+function draw(){
+ctx.clearRect(0,0,400,400);
+
+ctx.fillStyle="blue";
+ctx.fillRect(player.x,player.y,20,20);
+
+enemies=enemies.filter(e=>{
+if(e.hp<=0){giveExp();return false;}
+return true;
+});
+
+enemies.forEach(e=>{
+ctx.fillStyle="red";
+ctx.fillRect(e.x,e.y,20,20);
+});
+
+ctx.fillStyle="white";
+ctx.fillText("HP:"+player.hp,10,20);
+ctx.fillText("Lv:"+player.level,10,40);
+
+enemyAI();
+updateUI();
+checkMonthlyVIP();
+
+requestAnimationFrame(draw);
+}
+draw();
+
+// ===== 캐릭 로드 =====
+let sel=document.getElementById("char");
+inventory.characters.forEach(c=>{
+let opt=document.createElement("option");
+opt.value=c;
+opt.innerText=c;
+sel.appendChild(opt);
+});
+</script>
+
 </body>
 </html>
-
-
