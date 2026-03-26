@@ -7,22 +7,22 @@
 
 <style>
 body {margin:0; overflow:hidden; background:black; color:white;}
-canvas {position:absolute;}
 
 #startScreen {
 position:absolute;
 width:100%; height:100%;
 display:flex;
-flex-direction:column;
 justify-content:center;
 align-items:center;
-background:#000;
+flex-direction:column;
+background:black;
+z-index:10;
 }
 
 #joystick {
 position:absolute;
 bottom:50px; left:50px;
-width:100px; height:100px;
+width:120px; height:120px;
 background:rgba(255,255,255,0.1);
 border-radius:50%;
 }
@@ -32,7 +32,7 @@ width:40px; height:40px;
 background:cyan;
 border-radius:50%;
 position:absolute;
-top:30px; left:30px;
+top:40px; left:40px;
 }
 </style>
 </head>
@@ -44,7 +44,7 @@ top:30px; left:30px;
 <button onclick="startGame()">START</button>
 </div>
 
-<canvas id="game"></canvas>
+<canvas id="game" style="display:none;"></canvas>
 
 <div id="joystick">
 <div id="stick"></div>
@@ -54,195 +54,150 @@ top:30px; left:30px;
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
+// ===== 화면 =====
 function resize(){
-canvas.width=window.innerWidth;
-canvas.height=window.innerHeight;
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
 }
 resize();
-window.addEventListener("resize",resize);
+window.addEventListener("resize", resize);
 
 // ===== 데이터 =====
-let player={x:500,y:500,hp:100,level:1,exp:0,atk:10};
-let enemies=[];
-let wave=1;
-
-// ===== 저장 =====
-function save(){
-localStorage.setItem("save",JSON.stringify(player));
-}
-function load(){
-let s=localStorage.getItem("save");
-if(s) player=JSON.parse(s);
-}
-load();
-
-// ===== VIP =====
-let vip={lastMonth:null};
-function checkVIP(){
-let now=new Date();
-let key=now.getFullYear()+"-"+now.getMonth();
-
-if(now.getDate()==1 && vip.lastMonth!==key){
-player.atk+=5;
-vip.lastMonth=key;
-}
-}
-setInterval(checkVIP,5000);
+let player = {x:500, y:500, hp:100, atk:10};
+let enemies = [];
+let wave = 1;
 
 // ===== 시작 =====
 function startGame(){
-document.getElementById("startScreen").style.display="none";
-spawnWave();
+  document.getElementById("startScreen").style.display="none";
+  canvas.style.display="block";
+  spawnWave();
 }
 
-// ===== 웨이브 =====
+// ===== 적 생성 =====
 function spawnWave(){
-enemies=[];
-for(let i=0;i<wave+2;i++){
-enemies.push({
-x:Math.random()*2000,
-y:Math.random()*2000,
-hp:50+wave*20
-});
+  enemies = [];
+  for(let i=0;i<wave+2;i++){
+    enemies.push({
+      x:Math.random()*1500,
+      y:Math.random()*1500,
+      hp:50
+    });
+  }
 }
+
+// ===== 공격 =====
+function basicAttack(){
+  enemies.forEach(e=>{
+    let dx = player.x - e.x;
+    let dy = player.y - e.y;
+
+    if(Math.sqrt(dx*dx+dy*dy) < 60){
+      e.hp -= player.atk;
+    }
+  });
+}
+
+canvas.addEventListener("click", basicAttack);
+canvas.addEventListener("touchstart", basicAttack);
+
+// ===== 조이스틱 =====
+let joy = document.getElementById("joystick");
+
+let moveX = 0;
+let moveY = 0;
+
+joy.addEventListener("touchmove", e=>{
+  let t = e.touches[0];
+  let rect = joy.getBoundingClientRect();
+
+  let dx = t.clientX - (rect.left + rect.width/2);
+  let dy = t.clientY - (rect.top + rect.height/2);
+
+  moveX = dx * 0.1;
+  moveY = dy * 0.1;
+});
+
+joy.addEventListener("touchend", ()=>{
+  moveX = 0;
+  moveY = 0;
+});
+
+// ===== PC 이동 =====
+document.addEventListener("keydown", e=>{
+  if(e.key==="w") player.y -= 10;
+  if(e.key==="s") player.y += 10;
+  if(e.key==="a") player.x -= 10;
+  if(e.key==="d") player.x += 10;
+});
+
+// ===== 카메라 =====
+let camera = {x:0, y:0};
+
+function updateCamera(){
+  camera.x = player.x - canvas.width/2;
+  camera.y = player.y - canvas.height/2;
 }
 
 // ===== AI =====
 function enemyAI(){
-enemies.forEach(e=>{
-let dx=player.x-e.x;
-let dy=player.y-e.y;
-let dist=Math.sqrt(dx*dx+dy*dy);
+  enemies.forEach(e=>{
+    let dx = player.x - e.x;
+    let dy = player.y - e.y;
+    let dist = Math.sqrt(dx*dx+dy*dy);
 
-if(dist>5){
-e.x+=dx/dist*2;
-e.y+=dy/dist*2;
-}
+    if(dist > 5){
+      e.x += dx/dist * 2;
+      e.y += dy/dist * 2;
+    }
 
-if(dist<30){
-player.hp-=0.2;
-}
-});
-}
-
-// ===== 공격 =====
-canvas.addEventListener("click",()=>{
-enemies.forEach(e=>{
-let dx=player.x-e.x;
-let dy=player.y-e.y;
-
-if(Math.sqrt(dx*dx+dy*dy)<60){
-e.hp-=player.atk;
-showDamage(e.x,e.y,player.atk);
-}
-});
-});
-
-// ===== 레벨 =====
-function giveExp(){
-player.exp+=20;
-
-if(player.exp>=player.level*50){
-player.exp=0;
-player.level++;
-player.atk+=2;
-}
-}
-
-// ===== 데미지 =====
-let dmgTexts=[];
-function showDamage(x,y,d){
-dmgTexts.push({x,y,text:d,life:30});
-}
-
-// ===== 조이스틱 =====
-let joy=document.getElementById("joystick");
-let stick=document.getElementById("stick");
-
-joy.addEventListener("touchmove",(e)=>{
-let t=e.touches[0];
-let rect=joy.getBoundingClientRect();
-
-let dx=t.clientX-rect.left-50;
-let dy=t.clientY-rect.top-50;
-
-player.x+=dx*0.05;
-player.y+=dy*0.05;
-
-stick.style.left=(dx+50-20)+"px";
-stick.style.top=(dy+50-20)+"px";
-});
-
-joy.addEventListener("touchend",()=>{
-stick.style.left="30px";
-stick.style.top="30px";
-});
-
-// ===== 키보드 =====
-document.addEventListener("keydown",(e)=>{
-if(e.key==="w")player.y-=10;
-if(e.key==="s")player.y+=10;
-if(e.key==="a")player.x-=10;
-if(e.key==="d")player.x+=10;
-});
-
-// ===== 카메라 =====
-let camera={x:0,y:0};
-function updateCamera(){
-camera.x=player.x-canvas.width/2;
-camera.y=player.y-canvas.height/2;
+    if(dist < 30){
+      player.hp -= 0.2;
+    }
+  });
 }
 
 // ===== 루프 =====
 function draw(){
-ctx.clearRect(0,0,canvas.width,canvas.height);
 
-updateCamera();
-ctx.setTransform(1,0,0,1,0,0);
-ctx.translate(-camera.x,-camera.y);
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.clearRect(0,0,canvas.width,canvas.height);
 
-// 플레이어
-ctx.fillStyle="cyan";
-ctx.fillRect(player.x,player.y,20,20);
+  // 이동 적용
+  player.x += moveX;
+  player.y += moveY;
 
-// 적
-enemies=enemies.filter(e=>{
-if(e.hp<=0){giveExp();return false;}
-return true;
-});
+  updateCamera();
+  ctx.translate(-camera.x, -camera.y);
 
-enemies.forEach(e=>{
-ctx.fillStyle="red";
-ctx.fillRect(e.x,e.y,20,20);
-});
+  // 플레이어
+  ctx.fillStyle="cyan";
+  ctx.fillRect(player.x, player.y, 25, 25);
 
-// 데미지 텍스트
-dmgTexts.forEach((d,i)=>{
-ctx.fillStyle="yellow";
-ctx.fillText(d.text,d.x,d.y-d.life);
-d.life--;
-if(d.life<=0)dmgTexts.splice(i,1);
-});
+  // 적
+  enemies = enemies.filter(e => e.hp > 0);
 
-// AI
-enemyAI();
+  enemies.forEach(e=>{
+    ctx.fillStyle="red";
+    ctx.fillRect(e.x, e.y, 25, 25);
+  });
 
-// 웨이브
-if(enemies.length===0){
-wave++;
-spawnWave();
-}
+  // AI
+  enemyAI();
 
-// UI
-ctx.fillStyle="white";
-ctx.fillText("HP:"+Math.floor(player.hp),10,20);
-ctx.fillText("Lv:"+player.level,10,40);
-ctx.fillText("Wave:"+wave,10,60);
+  // 웨이브
+  if(enemies.length === 0){
+    wave++;
+    spawnWave();
+  }
 
-// 저장
-save();
+  // UI
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.fillStyle="white";
+  ctx.fillText("HP: " + Math.floor(player.hp), 20, 30);
+  ctx.fillText("Wave: " + wave, 20, 50);
 
-requestAnimationFrame(draw);
+  requestAnimationFrame(draw);
 }
 draw();
 </script>
