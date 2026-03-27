@@ -15,10 +15,8 @@ background:black;
 
 canvas{
 position:fixed;
-top:0;
-left:0;
-width:100vw;
-height:100vh;
+top:0;left:0;
+width:100vw;height:100vh;
 display:block;
 }
 
@@ -104,6 +102,7 @@ margin:30px;
 const c=document.getElementById("c");
 const ctx=c.getContext("2d");
 
+/* 화면 */
 function resize(){
 c.width=window.innerWidth;
 c.height=window.innerHeight;
@@ -120,7 +119,7 @@ let camX=0,camY=0;
 
 let player={
 x:500,y:500,
-hp:100,speed:3,atk:10,
+speed:3,atk:10,
 dirX:1,dirY:0,
 step:0
 };
@@ -142,7 +141,7 @@ if(selected===k)e.classList.add("active");
 
 e.onclick=()=>{
 selected=k;
-apply();
+applyChar();
 drawChars();
 };
 
@@ -153,14 +152,13 @@ drawChars();
 
 /* 능력치 */
 const stat={
-warrior:{hp:140,speed:2.5,atk:18},
-ninja:{hp:80,speed:4.8,atk:10},
-sniper:{hp:70,speed:3,atk:28}
+warrior:{speed:2.5,atk:18},
+ninja:{speed:4.8,atk:10},
+sniper:{speed:3,atk:28}
 };
 
-function apply(){
+function applyChar(){
 let s=stat[selected];
-player.hp=s.hp;
 player.speed=s.speed;
 player.atk=s.atk;
 }
@@ -187,7 +185,7 @@ for(let i=0;i<6;i++){
 enemies.push({
 x:Math.random()*mapW,
 y:Math.random()*mapH,
-hp:40
+hp:30
 });
 }
 }
@@ -238,7 +236,13 @@ player.y=Math.max(0,Math.min(player.y,mapH));
 
 /* 공격 */
 function shoot(mx,my){
-let a=Math.atan2(my-player.y,mx-player.x);
+
+let rect=c.getBoundingClientRect();
+
+let tx=mx-rect.left+camX;
+let ty=my-rect.top+camY;
+
+let a=Math.atan2(ty-player.y,tx-player.x);
 
 bullets.push({
 x:player.x,y:player.y,
@@ -251,9 +255,10 @@ player.dirY=Math.sin(a);
 }
 
 c.onclick=e=>shoot(e.clientX,e.clientY);
+
 c.addEventListener("touchstart",e=>{
 let r=c.getBoundingClientRect();
-shoot(e.touches[0].clientX-r.left,e.touches[0].clientY-r.top);
+shoot(e.touches[0].clientX,e.touches[0].clientY);
 });
 
 /* 스킬 */
@@ -279,15 +284,19 @@ move();
 
 player.step+=0.2;
 
+/* 카메라 */
 camX=Math.max(0,Math.min(player.x-c.width/2,mapW-c.width));
 camY=Math.max(0,Math.min(player.y-c.height/2,mapH-c.height));
 
+/* 총알 */
 bullets.forEach(b=>{
 b.x+=b.vx;
 b.y+=b.vy;
 
 enemies.forEach(e=>{
-if(Math.hypot(b.x-e.x,b.y-e.y)<20)e.hp-=10;
+if(Math.hypot(b.x-e.x,b.y-e.y)<15){
+e.hp-=10;
+}
 });
 });
 
@@ -323,28 +332,39 @@ ctx.restore();
 /* draw */
 function draw(){
 
+/* 초기화 (중요🔥) */
+ctx.setTransform(1,0,0,1,0,0);
+ctx.clearRect(0,0,c.width,c.height);
+
+/* 카메라 */
 ctx.setTransform(1,0,0,1,-camX,-camY);
 
+/* 배경 */
 ctx.fillStyle="#2ecc71";
 ctx.fillRect(0,0,mapW,mapH);
 
+/* 패턴 */
+for(let i=0;i<200;i++){
+ctx.fillStyle="rgba(0,0,0,0.05)";
+ctx.fillRect((i*37)%mapW,(i*91)%mapH,2,2);
+}
+
+/* 플레이어 */
 drawPlayer();
 
+/* 적 */
 ctx.fillStyle="red";
 enemies.forEach(e=>{
-ctx.beginPath();
-ctx.arc(e.x,e.y,10,0,Math.PI*2);
-ctx.fill();
+ctx.fillRect(e.x-10,e.y-10,20,20);
 });
 
+/* 총알 */
 ctx.fillStyle="yellow";
 bullets.forEach(b=>{
 ctx.beginPath();
 ctx.arc(b.x,b.y,4,0,Math.PI*2);
 ctx.fill();
 });
-
-ctx.setTransform(1,0,0,1,0,0);
 }
 
 /* 루프 */
