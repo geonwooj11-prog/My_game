@@ -16,20 +16,32 @@ flex-direction:column;background:black;
 }
 
 #hud{position:fixed;top:10px;left:10px;width:220px;}
-.bar{height:18px;background:#111;border-radius:999px;}
-.fill{height:100%;background:linear-gradient(90deg,#ff3d3d,#ff9a5a);}
+.bar{height:20px;background:#111;border-radius:999px;border:2px solid #000;}
+.fill{
+height:100%;
+background:linear-gradient(90deg,#ff3d3d,#ff9a5a);
+box-shadow:0 0 10px rgba(255,80,80,0.6);
+}
 
 #skills{position:fixed;right:20px;bottom:20px;}
-.skill-btn{width:70px;height:70px;border-radius:20px;margin:5px;font-size:18px;}
+
+.skill-btn{
+width:80px;height:80px;border-radius:20px;margin:5px;
+background:radial-gradient(circle,#1f2f4d,#0a1220);
+color:white;font-weight:bold;
+box-shadow:0 6px 12px rgba(0,0,0,0.5);
+}
 
 #joystickBase{
 position:fixed;bottom:30px;left:30px;
 width:120px;height:120px;border-radius:50%;
-background:#ffffff10;
+background:radial-gradient(circle,#ffffff15,#ffffff05);
 }
+
 #joystickStick{
 width:60px;height:60px;border-radius:50%;
-background:#00e5ff;margin:30px;
+background:radial-gradient(circle,#00e5ff,#0088ff);
+margin:30px;
 }
 
 /* 컷씬 */
@@ -44,8 +56,6 @@ transition:0.4s;
 }
 #skillCut.show{left:10px;}
 #cutImg{width:70px;height:70px;border-radius:10px;}
-#cutText{display:flex;flex-direction:column;}
-#cutSkill{font-size:18px;font-weight:bold;}
 </style>
 </head>
 
@@ -73,9 +83,7 @@ transition:0.4s;
 
 <div id="skillCut">
 <img id="cutImg">
-<div id="cutText">
 <div id="cutSkill"></div>
-</div>
 </div>
 
 <script>
@@ -86,35 +94,13 @@ canvas.height=innerHeight;
 
 /* 사운드 */
 const audioCtx=new(window.AudioContext||window.webkitAudioContext)();
-function tone(f,t=0.05){
-let o=audioCtx.createOscillator();
-let g=audioCtx.createGain();
-o.frequency.value=f;o.connect(g);g.connect(audioCtx.destination);
-g.gain.value=0.05;o.start();o.stop(audioCtx.currentTime+t);
-}
-
-/* 이미지 */
-const imgs={
-warrior:new Image(),
-ninja:new Image(),
-sniper:new Image()
-};
-imgs.warrior.src="https://i.imgur.com/7yUvePI.png";
-imgs.ninja.src="https://i.imgur.com/JlVoG7b.png";
-imgs.sniper.src="https://i.imgur.com/Z6X9F7Z.png";
+function tone(f){let o=audioCtx.createOscillator();let g=audioCtx.createGain();o.frequency.value=f;o.connect(g);g.connect(audioCtx.destination);g.gain.value=0.05;o.start();o.stop(audioCtx.currentTime+0.05);}
 
 /* 상태 */
 let skillSlow=0;
 
 /* 플레이어 */
-let player={
-x:300,y:300,hp:100,speed:3,
-dirX:1,dirY:0,
-job:"warrior",
-rage:0,
-zoom:false,
-mode:"ranged"
-};
+let player={x:300,y:300,hp:100,speed:3,dirX:1,dirY:0,job:"warrior",rage:0,zoom:false,mode:"ranged"};
 
 /* 펫 */
 let pet={x:0,y:0,a:0};
@@ -126,6 +112,7 @@ let bullets=[];
 /* 시작 */
 function startGame(){
 document.getElementById("startScreen").style.display="none";
+enemies=[];bullets=[];
 spawnEnemies();
 }
 
@@ -141,38 +128,67 @@ type:Math.random()<0.5?"melee":"ranged"
 }
 }
 
-/* 이동 */
+/* ===== 조이스틱 ===== */
+let joyActive=false,joyX=0,joyY=0;
+const base=document.getElementById("joystickBase");
+const stick=document.getElementById("joystickStick");
+
+base.addEventListener("touchstart",()=>joyActive=true);
+
+base.addEventListener("touchmove",e=>{
+if(!joyActive)return;
+const r=base.getBoundingClientRect();
+let x=e.touches[0].clientX-r.left-60;
+let y=e.touches[0].clientY-r.top-60;
+let d=Math.hypot(x,y);
+if(d>40){x=x/d*40;y=y/d*40;}
+joyX=x/40;joyY=y/40;
+stick.style.transform=`translate(${x}px,${y}px)`;
+});
+
+base.addEventListener("touchend",()=>{
+joyActive=false;joyX=0;joyY=0;
+stick.style.transform=`translate(0,0)`;
+});
+
+/* 키보드 */
 let keys={};
 onkeydown=e=>keys[e.key]=true;
 onkeyup=e=>keys[e.key]=false;
 
+/* 이동 */
 function move(){
 let sp=player.speed;
 if(player.rage>0) sp*=1.4;
-if(keys["w"]) player.y-=sp;
-if(keys["s"]) player.y+=sp;
-if(keys["a"]) player.x-=sp;
-if(keys["d"]) player.x+=sp;
+
+if(joyActive){
+player.x+=joyX*sp;
+player.y+=joyY*sp;
+player.dirX=joyX;player.dirY=joyY;
 }
 
-/* 공격 */
-canvas.onclick=()=>{
-let a=Math.atan2(player.dirY||0,player.dirX||1);
-bullets.push({
-x:player.x,y:player.y,
-vx:Math.cos(a)*8,
-vy:Math.sin(a)*8,
-dmg:10
-});
+if(keys["w"]) {player.y-=sp; player.dirY=-1;}
+if(keys["s"]) {player.y+=sp; player.dirY=1;}
+if(keys["a"]) {player.x-=sp; player.dirX=-1;}
+if(keys["d"]) {player.x+=sp; player.dirX=1;}
+}
+
+/* 공격 (터치 방향) */
+canvas.addEventListener("click",e=>{
+let r=canvas.getBoundingClientRect();
+let mx=e.clientX-r.left;
+let my=e.clientY-r.top;
+let a=Math.atan2(my-player.y,mx-player.x);
+
+bullets.push({x:player.x,y:player.y,vx:Math.cos(a)*8,vy:Math.sin(a)*8,dmg:10});
 tone(500);
-};
+});
 
 /* 컷씬 */
 function showCut(text){
 skillSlow=20;
 let cut=document.getElementById("skillCut");
 document.getElementById("cutSkill").innerText=text;
-document.getElementById("cutImg").src=imgs[player.job].src;
 cut.classList.add("show");
 setTimeout(()=>cut.classList.remove("show"),1200);
 }
@@ -266,10 +282,10 @@ function draw(){
 ctx.clearRect(0,0,canvas.width,canvas.height);
 
 // player
-let img=imgs[player.job];
-if(img.complete){
-ctx.drawImage(img,player.x-20,player.y-20,40,40);
-}
+ctx.fillStyle=player.rage>0?"red":"cyan";
+ctx.beginPath();
+ctx.arc(player.x,player.y,15,0,Math.PI*2);
+ctx.fill();
 
 // pet
 ctx.fillStyle="#00e5ff";
@@ -309,6 +325,12 @@ draw();
 requestAnimationFrame(loop);
 }
 loop();
+
+/* 버튼 효과 */
+document.querySelectorAll(".skill-btn").forEach(btn=>{
+btn.addEventListener("touchstart",()=>btn.style.transform="scale(0.85)");
+btn.addEventListener("touchend",()=>btn.style.transform="scale(1)");
+});
 </script>
 
 </body>
