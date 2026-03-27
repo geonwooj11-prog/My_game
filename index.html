@@ -6,45 +6,59 @@
 <title>VOID RUSH</title>
 
 <style>
-body{margin:0;overflow:hidden;background:#05070d;color:white;font-family:Arial;}
+body{margin:0;overflow:hidden;background:#0f2027;color:white;font-family:Arial;}
 canvas{position:fixed;inset:0;}
 
-/* 시작 */
 #startScreen{
 position:fixed;inset:0;
 display:flex;flex-direction:column;
 justify-content:center;align-items:center;
-background:black;z-index:10;
+background:black;
+z-index:10;
 }
 
+/* 캐릭 */
 #charSelect{display:flex;gap:10px;margin-bottom:20px;}
-.char{padding:10px 14px;border-radius:10px;background:#222;border:2px solid transparent;}
-.char.active{border-color:#00e5ff;background:#0a1a2a;}
+.char{padding:10px;background:#222;border-radius:10px;}
+.char.active{border:2px solid #00e5ff;}
 
-#hud{position:fixed;top:10px;left:10px;width:220px;display:none;}
-.bar{height:20px;background:#111;border-radius:999px;border:2px solid #000;}
-.fill{height:100%;background:linear-gradient(90deg,#ff3d3d,#ff9a5a);}
+/* 플랫폼 */
+#platformSelect{margin-bottom:15px;}
+
+#hud{position:fixed;top:10px;left:10px;display:none;}
+.bar{height:20px;width:200px;background:#111;border-radius:999px;}
+.fill{height:100%;background:red;}
 
 #skills{
-position:fixed;right:15px;bottom:20px;
+position:fixed;right:20px;bottom:20px;
 display:grid;grid-template-columns:repeat(2,80px);
 gap:10px;display:none;
 }
-.skill-btn{width:80px;height:80px;border-radius:20px;background:#1a2235;color:white;}
+.skill-btn{width:80px;height:80px;background:#1a2235;color:white;}
 
 #joystickBase{
 position:fixed;bottom:20px;left:20px;
 width:120px;height:120px;border-radius:50%;
-background:#ffffff15;display:none;
+background:#ffffff10;display:none;
 }
-#joystickStick{width:60px;height:60px;border-radius:50%;background:#00e5ff;margin:30px;}
+#joystickStick{
+width:60px;height:60px;border-radius:50%;
+background:#00e5ff;margin:30px;
+}
+
+/* 상점 */
+#shop{
+position:fixed;top:50%;left:50%;
+transform:translate(-50%,-50%) scale(0);
+background:#111;padding:20px;border-radius:10px;
+transition:0.2s;
+}
+#shop.show{transform:translate(-50%,-50%) scale(1);}
 
 #skillCut{
 position:fixed;top:20px;left:-300px;
-width:250px;height:80px;
-background:#111;border-left:5px solid #00e5ff;
-display:flex;align-items:center;padding:10px;
-transition:0.4s;
+background:#111;padding:10px;
+transition:0.3s;
 }
 #skillCut.show{left:10px;}
 </style>
@@ -53,12 +67,20 @@ transition:0.4s;
 <body>
 
 <div id="startScreen">
+
 <h1>VOID RUSH</h1>
+
+<div id="platformSelect">
+<button onclick="setPlatform('pc')">PC</button>
+<button onclick="setPlatform('mobile')">모바일</button>
+</div>
 
 <div id="charSelect"></div>
 
 <button onclick="gacha()">가챠</button>
+<button onclick="openShop()">상점</button>
 <button onclick="startGame()">START</button>
+
 </div>
 
 <div id="hud">
@@ -76,6 +98,12 @@ transition:0.4s;
 <button class="skill-btn" onclick="useSkill(3)">F</button>
 </div>
 
+<div id="shop">
+<button onclick="buyGacha()">가챠(10💎)</button>
+<button onclick="heal()">회복(5💎)</button>
+<button onclick="closeShop()">닫기</button>
+</div>
+
 <div id="skillCut"><div id="cutSkill"></div></div>
 
 <script>
@@ -84,21 +112,21 @@ const ctx=canvas.getContext("2d");
 canvas.width=innerWidth;
 canvas.height=innerHeight;
 
-/* ===== 저장 ===== */
+/* ===== 상태 ===== */
+let platform=null;
+let gameStarted=false;
 let inventory={warrior:1,ninja:0,sniper:0};
 let selectedChar=null;
+let diamonds=0;
+let wave=1;
+let stage=1;
 
-function saveGame(){
-localStorage.setItem("void",JSON.stringify({inventory,selectedChar}));
-}
-function loadGame(){
-let d=localStorage.getItem("void");
-if(!d)return;
-let s=JSON.parse(d);
-inventory=s.inventory||inventory;
-selectedChar=s.selectedChar||null;
-}
-loadGame();
+let player={x:300,y:300,hp:100,speed:3,job:null,rage:0,dirX:1,dirY:0};
+let enemies=[],bullets=[],enemyBullets=[];
+let cooldowns=[0,0,0,0];
+
+/* ===== 플랫폼 ===== */
+function setPlatform(p){platform=p;}
 
 /* ===== 캐릭 UI ===== */
 function renderChars(){
@@ -113,17 +141,8 @@ el.onclick=()=>{
 selectedChar=k;player.job=k;
 document.querySelectorAll(".char").forEach(c=>c.classList.remove("active"));
 el.classList.add("active");
-saveGame();
 };
 div.appendChild(el);
-
-/* 각성 */
-if(inventory[k]>=3){
-let b=document.createElement("button");
-b.innerText="각성";
-b.onclick=()=>awaken(k);
-div.appendChild(b);
-}
 }
 }
 }
@@ -134,97 +153,131 @@ function gacha(){
 let r=Math.random();
 let p=r<0.5?"warrior":r<0.85?"ninja":"sniper";
 inventory[p]++;
-alert("획득:"+p);
-saveGame();
 renderChars();
 }
 
-/* ===== 각성 ===== */
-const awakenMap={warrior:"warrior_awaken",ninja:"ninja_awaken",sniper:"sniper_awaken"};
-function awaken(k){
-if(inventory[k]<3)return;
-inventory[k]-=3;
-inventory[awakenMap[k]]=(inventory[awakenMap[k]]||0)+1;
-alert("각성:"+awakenMap[k]);
-saveGame();
-renderChars();
-}
+/* ===== 상점 ===== */
+function openShop(){document.getElementById("shop").classList.add("show");}
+function closeShop(){document.getElementById("shop").classList.remove("show");}
+function buyGacha(){if(diamonds>=10){diamonds-=10;gacha();}}
+function heal(){if(diamonds>=5){diamonds-=5;player.hp=100;}}
 
-/* ===== 게임 상태 ===== */
-let gameStarted=false,skillSlow=0,wave=1;
-let player={x:300,y:300,hp:100,speed:3,job:null,rage:0,zoom:false,mode:"ranged"};
-let enemies=[],bullets=[],pet={x:0,y:0,a:0};
-
-/* 시작 */
+/* ===== 시작 ===== */
 function startGame(){
+if(!platform)return alert("플랫폼 선택");
 if(!selectedChar)return alert("캐릭 선택");
+
 gameStarted=true;
+
 document.getElementById("startScreen").style.display="none";
 document.getElementById("hud").style.display="block";
 document.getElementById("skills").style.display="grid";
+
+if(platform==="mobile"){
 document.getElementById("joystickBase").style.display="block";
+}
+
 spawn();
 }
 
-/* 적 + 보스 */
+/* ===== 적 ===== */
 function spawn(){
+enemies=[];
 if(wave%5===0){
 enemies.push({x:400,y:100,hp:300,type:"boss",size:25});
 return;
 }
 for(let i=0;i<6;i++){
-enemies.push({x:Math.random()*800,y:Math.random()*600,hp:40,type:"melee",size:12});
+enemies.push({
+x:Math.random()*800,
+y:Math.random()*600,
+hp:40,
+type:Math.random()<0.5?"melee":"ranged",
+size:12
+});
 }
 }
 
-/* 입력 */
+/* ===== 입력 ===== */
 let keys={};
 onkeydown=e=>keys[e.key]=true;
 onkeyup=e=>keys[e.key]=false;
 
-/* 이동 */
+/* ===== 조이스틱 ===== */
+let joyActive=false,joyX=0,joyY=0;
+let base=document.getElementById("joystickBase");
+let stick=document.getElementById("joystickStick");
+
+base.addEventListener("touchstart",()=>joyActive=true);
+base.addEventListener("touchmove",e=>{
+let r=base.getBoundingClientRect();
+let x=e.touches[0].clientX-r.left-60;
+let y=e.touches[0].clientY-r.top-60;
+let d=Math.hypot(x,y);
+if(d>40){x=x/d*40;y=y/d*40;}
+joyX=x/40;joyY=y/40;
+stick.style.transform=`translate(${x}px,${y}px)`;
+});
+base.addEventListener("touchend",()=>{joyActive=false;joyX=0;joyY=0;stick.style.transform="translate(0,0)";});
+
+/* ===== 이동 ===== */
 function move(){
 if(!gameStarted)return;
+
 let sp=player.speed*(player.rage>0?1.4:1);
+
+if(platform==="mobile" && joyActive){
+player.x+=joyX*sp;
+player.y+=joyY*sp;
+}
+
+if(platform==="pc"){
 if(keys["w"])player.y-=sp;
 if(keys["s"])player.y+=sp;
 if(keys["a"])player.x-=sp;
 if(keys["d"])player.x+=sp;
 }
+}
 
-/* 공격 */
+/* ===== 공격 ===== */
 canvas.onclick=e=>{
 if(!gameStarted)return;
-let r=canvas.getBoundingClientRect();
+
 let a=Math.atan2(e.clientY-player.y,e.clientX-player.x);
 bullets.push({x:player.x,y:player.y,vx:Math.cos(a)*8,vy:Math.sin(a)*8,dmg:10});
 };
 
-/* 스킬 */
+/* ===== 스킬 ===== */
 function useSkill(i){
-if(!gameStarted)return;
-if(player.job==="warrior"&&i===3){player.rage=120;cut("RAGE");}
+if(!gameStarted || cooldowns[i]>0)return;
+cooldowns[i]=60;
+
+if(player.job==="warrior"&&i===3){
+player.rage=120;
+cut("RAGE");
+}
 }
 
-/* 컷씬 */
+/* ===== 컷씬 ===== */
 function cut(t){
-skillSlow=20;
 let c=document.getElementById("skillCut");
 document.getElementById("cutSkill").innerText=t;
 c.classList.add("show");
-setTimeout(()=>c.classList.remove("show"),1200);
+setTimeout(()=>c.classList.remove("show"),1000);
 }
 
-/* 전투 */
+/* ===== 전투 ===== */
 function hit(e,d){
 if(Math.random()<0.2)d*=2;
 e.hp-=d;
 }
 
-/* 업데이트 */
+/* ===== 업데이트 ===== */
 function update(){
 if(!gameStarted)return;
+
 move();
+cooldowns=cooldowns.map(c=>c>0?c-1:0);
 
 bullets.forEach(b=>{
 b.x+=b.vx;
@@ -234,26 +287,88 @@ if(Math.hypot(b.x-e.x,b.y-e.y)<20)hit(e,b.dmg);
 });
 });
 
+/* 적 공격 */
+enemies.forEach(e=>{
+let dx=player.x-e.x;
+let dy=player.y-e.y;
+let d=Math.hypot(dx,dy);
+
+if(e.type==="melee"){
+e.x+=dx/d*1.5;
+e.y+=dy/d*1.5;
+}
+
+if(e.type==="ranged" && Math.random()<0.02){
+let a=Math.atan2(dy,dx);
+enemyBullets.push({x:e.x,y:e.y,vx:Math.cos(a)*4,vy:Math.sin(a)*4});
+}
+
+/* 보스 패턴 */
+if(e.type==="boss" && Math.random()<0.05){
+for(let i=0;i<8;i++){
+let a=i*(Math.PI*2/8);
+enemyBullets.push({x:e.x,y:e.y,vx:Math.cos(a)*3,vy:Math.sin(a)*3});
+}
+}
+
+if(d<20) player.hp-=0.5;
+});
+
+/* 적 총알 */
+enemyBullets.forEach(b=>{
+b.x+=b.vx;
+b.y+=b.vy;
+if(Math.hypot(b.x-player.x,b.y-player.y)<15){
+player.hp-=2;
+}
+});
+
 enemies=enemies.filter(e=>e.hp>0);
 
+/* 웨이브 */
 if(enemies.length===0){
 wave++;
+if(wave%5===0)stage++;
 if(Math.random()<0.4)gacha();
 spawn();
 }
+
+/* 게임오버 */
+if(player.hp<=0){
+let reward=wave*2;
+diamonds+=reward;
+alert("패배 보상:"+reward+"💎");
+
+player.hp=100;
+wave=1;stage=1;
+gameStarted=false;
+
+document.getElementById("startScreen").style.display="flex";
+}
 }
 
-/* draw */
-function draw(){
-ctx.clearRect(0,0,canvas.width,canvas.height);
-
-/* player */
+/* ===== 캐릭 ===== */
+function drawPlayer(){
 ctx.fillStyle="cyan";
 ctx.beginPath();
 ctx.arc(player.x,player.y,15,0,Math.PI*2);
 ctx.fill();
+}
 
-/* enemies */
+/* ===== draw ===== */
+function draw(){
+
+// 배경
+if(stage===1) ctx.fillStyle="#2ecc71";
+if(stage===2) ctx.fillStyle="#d4a373";
+if(stage===3) ctx.fillStyle="#ff0000";
+if(stage>=4) ctx.fillStyle="black";
+
+ctx.fillRect(0,0,canvas.width,canvas.height);
+
+drawPlayer();
+
+/* 적 */
 enemies.forEach(e=>{
 ctx.fillStyle=e.type==="boss"?"purple":"red";
 ctx.beginPath();
@@ -261,21 +376,37 @@ ctx.arc(e.x,e.y,e.size,0,Math.PI*2);
 ctx.fill();
 });
 
-/* bullets */
-bullets.forEach(b=>{
+/* 총알 */
 ctx.fillStyle="yellow";
+bullets.forEach(b=>{
 ctx.beginPath();
 ctx.arc(b.x,b.y,5,0,Math.PI*2);
 ctx.fill();
 });
 
-/* wave */
+/* 적 총알 */
+ctx.fillStyle="red";
+enemyBullets.forEach(b=>{
+ctx.beginPath();
+ctx.arc(b.x,b.y,4,0,Math.PI*2);
+ctx.fill();
+});
+
+/* UI */
 ctx.fillStyle="white";
 ctx.fillText("WAVE:"+wave,20,40);
+ctx.fillText("STAGE:"+stage,20,60);
+ctx.fillText("💎:"+diamonds,20,80);
+
+document.getElementById("hpFill").style.width=player.hp+"%";
 }
 
-/* loop */
-function loop(){update();draw();requestAnimationFrame(loop);}
+/* ===== 루프 ===== */
+function loop(){
+update();
+draw();
+requestAnimationFrame(loop);
+}
 loop();
 </script>
 
